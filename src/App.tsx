@@ -17,6 +17,8 @@ import { ToolCard } from './components/ToolCard';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ActionHistory } from './components/ActionHistory';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 
 import { 
   Mic, 
@@ -76,6 +78,67 @@ export const App: React.FC = () => {
     });
   }, []);
 
+  // Handle Android Hardware Back Button & Modal Hierarchy
+  useEffect(() => {
+    let backListenerHandle: any = null;
+
+    if (Capacitor.isNativePlatform()) {
+      CapacitorApp.addListener('backButton', () => {
+        console.log('[BackButton] Android back pressed.');
+
+        // 1. If text input / keyboard drawer is open -> dismiss it first
+        if (showTextInput) {
+          console.log('[BackButton] Closing text input drawer');
+          setShowTextInput(false);
+          return;
+        }
+
+        // 2. If confirmation modal is open -> dismiss confirmation
+        if (confirmationState.isOpen) {
+          console.log('[BackButton] Closing confirmation modal');
+          setConfirmationState(prev => ({ ...prev, isOpen: false }));
+          return;
+        }
+
+        // 3. If settings modal is open -> dismiss settings
+        if (isSettingsOpen) {
+          console.log('[BackButton] Closing settings modal');
+          setIsSettingsOpen(false);
+          return;
+        }
+
+        // 4. If history modal is open -> dismiss history
+        if (isHistoryOpen) {
+          console.log('[BackButton] Closing history modal');
+          setIsHistoryOpen(false);
+          return;
+        }
+
+        // 5. If on root screen with no overlays open -> allow normal Android app exit
+        console.log('[BackButton] On root screen, exiting app');
+        CapacitorApp.exitApp();
+      }).then(handle => {
+        backListenerHandle = handle;
+      });
+    }
+
+    // Also handle browser/web back button navigation gracefully
+    const handlePopState = () => {
+      if (showTextInput) { setShowTextInput(false); return; }
+      if (confirmationState.isOpen) { setConfirmationState(prev => ({ ...prev, isOpen: false })); return; }
+      if (isSettingsOpen) { setIsSettingsOpen(false); return; }
+      if (isHistoryOpen) { setIsHistoryOpen(false); return; }
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      if (backListenerHandle) {
+        backListenerHandle.remove();
+      }
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [showTextInput, confirmationState.isOpen, isSettingsOpen, isHistoryOpen]);
+
   // Quick prompt helper
   const handleQuickPrompt = (prompt: string) => {
     handleProcessInput(prompt);
@@ -120,7 +183,7 @@ export const App: React.FC = () => {
   };
 
   // Microphone toggle
-  const toggleListening = () => {
+  const toggleListening = async () => {
     if (state === 'listening') {
       SttService.stopListening();
       setState('idle');
@@ -136,23 +199,29 @@ export const App: React.FC = () => {
     setInterimSpeech('');
     setErrorMessage(null);
 
-    SttService.startListening({
-      onStart: () => setState('listening'),
-      onInterim: (text) => setInterimSpeech(text),
-      onFinal: (text) => {
-        setUserSpeech(text);
-        setInterimSpeech('');
-        handleProcessInput(text);
-      },
-      onError: (err) => {
-        setErrorMessage(err);
-        setState('idle');
-      },
-      onEnd: () => {
-        setState(prev => prev === 'listening' ? 'idle' : prev);
-      },
-      onVolume: (vol) => setMicAudioLevel(vol)
-    });
+    try {
+      await SttService.startListening({
+        onStart: () => setState('listening'),
+        onInterim: (text) => setInterimSpeech(text),
+        onFinal: (text) => {
+          setUserSpeech(text);
+          setInterimSpeech('');
+          handleProcessInput(text);
+        },
+        onError: (err) => {
+          setErrorMessage(err);
+          setState('idle');
+        },
+        onEnd: () => {
+          setState(prev => prev === 'listening' ? 'idle' : prev);
+        },
+        onVolume: (vol) => setMicAudioLevel(vol)
+      });
+    } catch (e: any) {
+      console.error('[App] toggleListening failed:', e);
+      setErrorMessage(e.message || 'Could not start voice recognition.');
+      setState('idle');
+    }
   };
 
   const handleTextSubmit = (e: React.FormEvent) => {

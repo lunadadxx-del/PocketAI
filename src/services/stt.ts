@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { NativeSpeechService } from './nativeSpeech';
+
 // Web Speech API interface definitions
 interface IWindow extends Window {
   SpeechRecognition?: any;
@@ -13,13 +16,23 @@ export class SttService {
   private static audioContext: AudioContext | null = null;
   private static micAnalyser: AnalyserNode | null = null;
   private static volumeCheckAnim: number | null = null;
+  private static stopNativeListener: (() => void) | null = null;
 
   public static isSupported(): boolean {
+    if (Capacitor.isNativePlatform()) {
+      return true; // Supported natively on Android via android.speech.SpeechRecognizer
+    }
     const win = window as unknown as IWindow;
     return Boolean(win.SpeechRecognition || win.webkitSpeechRecognition);
   }
 
   public static async checkPermission(): Promise<MicPermissionState> {
+    if (Capacitor.isNativePlatform()) {
+      const granted = await NativeSpeechService.checkPermissions();
+      console.log('[STT] Native permission status:', granted ? 'granted' : 'prompt');
+      return granted ? 'granted' : 'prompt';
+    }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       return 'unsupported';
     }
@@ -27,6 +40,7 @@ export class SttService {
       if (navigator.permissions && navigator.permissions.query) {
         // @ts-ignore
         const result = await navigator.permissions.query({ name: 'microphone' });
+        console.log('[STT] Web microphone permission:', result.state);
         return result.state as MicPermissionState;
       }
     } catch (e) {
@@ -36,12 +50,18 @@ export class SttService {
   }
 
   public static async requestPermission(): Promise<boolean> {
+    if (Capacitor.isNativePlatform()) {
+      console.log('[STT] Requesting native Android microphone permission...');
+      return await NativeSpeechService.requestPermissions();
+    }
+
     try {
+      console.log('[STT] Requesting web microphone permission via getUserMedia...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.getTracks().forEach(track => track.stop());
       return true;
     } catch (e) {
-      console.warn('Microphone permission denied', e);
+      console.warn('[STT] Microphone permission denied:', e);
       return false;
     }
   }
@@ -50,24 +70,71 @@ export class SttService {
     return this.micAnalyser;
   }
 
-  public static startListening(callbacks: {
+  public static async startListening(callbacks: {
     onStart?: () => void;
     onInterim?: (text: string) => void;
     onFinal?: (text: string) => void;
     onError?: (error: string) => void;
     onEnd?: () => void;
     onVolume?: (level: number) => void;
-  }): void {
+  }): Promise<void> {
     if (this.isListening) {
       this.stopListening();
     }
 
+    console.log('[STT] startListening called. Platform:', Capacitor.getPlatform());
+
+    // 1. NATIVE ANDROID SPEECH RECOGNITION (android.speech.SpeechRecognizer)
+    if (Capacitor.isNativePlatform()) {
+      this.isListening = true;
+      try {
+        this.stopNativeListener = await NativeSpeechService.startListening({
+          onStart: () => {
+            console.log('[STT] Native recognition started successfully');
+            if (callbacks.onStart) callbacks.onStart();
+          },
+          onInterim: (text) => {
+            console.log('[STT] Interim speech recognized:', text);
+            if (callbacks.onInterim) callbacks.onInterim(text);
+          },
+          onFinal: (text) => {
+            console.log('[STT] Final speech recognized:', text);
+            this.isListening = false;
+            if (callbacks.onFinal) callbacks.onFinal(text);
+          },
+          onError: (error) => {
+            console.warn('[STT] Native recognition error:', error);
+            this.isListening = false;
+            if (callbacks.onError) callbacks.onError(error);
+          },
+          onEnd: () => {
+            console.log('[STT] Native recognition ended');
+            this.isListening = false;
+            if (callbacks.onEnd) callbacks.onEnd();
+          },
+          onVolume: (level) => {
+            if (callbacks.onVolume) callbacks.onVolume(level);
+          }
+        });
+        return;
+      } catch (e: any) {
+        this.isListening = false;
+        console.error('[STT] Error invoking NativeSpeechService:', e);
+        if (callbacks.onError) {
+          callbacks.onError(e.message || 'Error starting speech recognition.');
+        }
+        return;
+      }
+    }
+
+    // 2. WEB BROWSER FALLBACK (Web Speech API)
     const win = window as unknown as IWindow;
     const SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
+      console.error('[STT] SpeechRecognition not available in this browser');
       if (callbacks.onError) {
-        callbacks.onError('Speech Recognition is not supported in this browser. Please use Chrome or Edge, or type your request.');
+        callbacks.onError('Speech Recognition is not supported in this browser. Please use Chrome/Edge or type your request.');
       }
       return;
     }
@@ -79,6 +146,7 @@ export class SttService {
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
+        console.log('[STT] Web SpeechRecognition started');
         this.isListening = true;
         this.startMicStream(callbacks.onVolume);
         if (callbacks.onStart) callbacks.onStart();
@@ -98,16 +166,18 @@ export class SttService {
         }
 
         if (interimTranscript && callbacks.onInterim) {
+          console.log('[STT] Web interim transcript:', interimTranscript);
           callbacks.onInterim(interimTranscript);
         }
 
         if (finalTranscript && callbacks.onFinal) {
+          console.log('[STT] Web final transcript:', finalTranscript);
           callbacks.onFinal(finalTranscript);
         }
       };
 
       recognition.onerror = (event: any) => {
-        console.warn('STT Error event:', event.error);
+        console.warn('[STT] Web Speech recognition error:', event.error);
         this.stopListening();
         let errorMsg = 'Voice recognition error';
         if (event.error === 'not-allowed') {
@@ -121,6 +191,7 @@ export class SttService {
       };
 
       recognition.onend = () => {
+        console.log('[STT] Web Speech recognition onend');
         this.isListening = false;
         this.stopMicStream();
         if (callbacks.onEnd) callbacks.onEnd();
@@ -130,7 +201,7 @@ export class SttService {
       recognition.start();
     } catch (err: any) {
       this.isListening = false;
-      console.error('Failed to start speech recognition:', err);
+      console.error('[STT] Failed to start web speech recognition:', err);
       if (callbacks.onError) {
         callbacks.onError(err.message || 'Could not start voice recognition.');
       }
@@ -138,16 +209,23 @@ export class SttService {
   }
 
   public static stopListening(): void {
-    if (this.recognition) {
-      try {
-        this.recognition.stop();
-      } catch (e) {
-        // ignore
+    console.log('[STT] stopListening called');
+    if (Capacitor.isNativePlatform()) {
+      if (this.stopNativeListener) {
+        this.stopNativeListener();
+        this.stopNativeListener = null;
       }
-      this.recognition = null;
+      NativeSpeechService.stopListening();
+    } else {
+      if (this.recognition) {
+        try {
+          this.recognition.stop();
+        } catch (e) {}
+        this.recognition = null;
+      }
+      this.stopMicStream();
     }
     this.isListening = false;
-    this.stopMicStream();
   }
 
   private static async startMicStream(onVolume?: (vol: number) => void): Promise<void> {
@@ -177,7 +255,7 @@ export class SttService {
         this.volumeCheckAnim = requestAnimationFrame(check);
       }
     } catch (e) {
-      console.warn('Microphone audio stream monitoring unavailable:', e);
+      console.warn('[STT] Web microphone audio stream monitoring unavailable:', e);
     }
   }
 
@@ -193,9 +271,7 @@ export class SttService {
     if (this.audioContext && this.audioContext.state !== 'closed') {
       try {
         this.audioContext.close();
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
       this.audioContext = null;
     }
     this.micAnalyser = null;

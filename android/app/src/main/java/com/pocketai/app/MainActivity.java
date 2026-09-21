@@ -7,6 +7,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NativeAlarmPlugin.class);
+        registerPlugin(NativeSpeechRecognitionPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
