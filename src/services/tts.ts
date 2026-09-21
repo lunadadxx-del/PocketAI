@@ -1,4 +1,5 @@
 import { ConfigService } from './config';
+import { LatencyTracker } from './latencyTracker';
 
 export class TtsService {
   private static audioCtx: AudioContext | null = null;
@@ -93,6 +94,9 @@ export class TtsService {
       this.currentSource = source;
       this.isPlaying = true;
 
+      // Exact moment response audio starts playing from speaker (T2)
+      LatencyTracker.markAudioStarted();
+
       if (onStart) onStart();
 
       source.onended = () => {
@@ -126,6 +130,8 @@ export class TtsService {
       utterance.pitch = 1.0;
       utterance.onstart = () => {
         this.isPlaying = true;
+        // Exact moment response audio starts playing from speaker (T2 fallback)
+        LatencyTracker.markAudioStarted();
         if (onStart) onStart();
       };
       utterance.onend = () => {

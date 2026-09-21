@@ -12,6 +12,7 @@ import { TtsService } from './services/tts';
 import { ConfigService } from './services/config';
 import { ToolExecutor } from './services/tools/executor';
 import { WakeWordService } from './services/wakeWord';
+import { LatencyTracker, LatencyRecord } from './services/latencyTracker';
 
 import { SiriOrb } from './components/SiriOrb';
 import { ToolCard } from './components/ToolCard';
@@ -68,6 +69,15 @@ export const App: React.FC = () => {
   });
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [latestLatency, setLatestLatency] = useState<LatencyRecord | null>(null);
+
+  // Subscribe to voice response latency measurements
+  useEffect(() => {
+    const unsub = LatencyTracker.onLatencyMeasured((record) => {
+      setLatestLatency(record);
+    });
+    return () => unsub();
+  }, []);
 
   // Register real timer listener
   useEffect(() => {
@@ -146,6 +156,7 @@ export const App: React.FC = () => {
 
   // Quick prompt helper
   const handleQuickPrompt = (prompt: string) => {
+    LatencyTracker.markSpeechEnded(prompt);
     handleProcessInput(prompt);
   };
 
@@ -201,6 +212,8 @@ export const App: React.FC = () => {
         },
         onInterim: (text) => setInterimSpeech(text),
         onFinal: (text) => {
+          // T1: Speech finished detection timestamp
+          LatencyTracker.markSpeechEnded(text);
           setUserSpeech(text);
           setInterimSpeech('');
           handleProcessInput(text);
@@ -286,6 +299,7 @@ export const App: React.FC = () => {
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (textInputValue.trim()) {
+      LatencyTracker.markSpeechEnded(textInputValue);
       handleProcessInput(textInputValue);
       setTextInputValue('');
       setShowTextInput(false);
@@ -409,6 +423,13 @@ export const App: React.FC = () => {
             <p className="text-xs text-slate-500">
               Tap the orb or speak to give a mobile command
             </p>
+          )}
+
+          {latestLatency && (
+            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/90 border border-cyan-500/30 text-[11px] font-mono text-cyan-300 shadow-md animate-fade-in">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+              <span>Voice Latency: <strong>{latestLatency.latencyMs} ms</strong> ({(latestLatency.latencyMs / 1000).toFixed(2)}s)</span>
+            </div>
           )}
 
           {errorMessage && (
