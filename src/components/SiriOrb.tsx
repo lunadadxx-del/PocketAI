@@ -37,7 +37,13 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({ state, onClick, audioLevel = 0
       let colors = ['rgba(56, 189, 248, 0.4)', 'rgba(168, 85, 247, 0.35)', 'rgba(236, 72, 153, 0.3)'];
 
       // Adjust animation based on state
-      if (state === 'listening') {
+      if (state === 'listening_for_piti') {
+        baseRadius = 60 + Math.sin(phase * 1.2) * 3;
+        colors = ['rgba(20, 184, 166, 0.5)', 'rgba(6, 182, 212, 0.4)', 'rgba(56, 189, 248, 0.3)'];
+      } else if (state === 'wake_word_detected') {
+        baseRadius = 76 + Math.sin(phase * 4) * 8;
+        colors = ['rgba(251, 191, 36, 0.8)', 'rgba(245, 158, 11, 0.7)', 'rgba(234, 88, 12, 0.6)'];
+      } else if (state === 'listening' || state === 'listening_for_command') {
         baseRadius = 65 + audioLevel * 35;
         colors = ['rgba(6, 182, 212, 0.6)', 'rgba(56, 189, 248, 0.5)', 'rgba(168, 85, 247, 0.4)'];
       } else if (state === 'thinking') {
@@ -76,7 +82,7 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({ state, onClick, audioLevel = 0
         const points = 36;
         for (let p = 0; p <= points; p++) {
           const angle = (p / points) * Math.PI * 2;
-          const waveDeform = Math.sin(angle * 3 + wavePhase) * (8 + (state === 'speaking' || state === 'listening' ? 12 : 4));
+          const waveDeform = Math.sin(angle * 3 + wavePhase) * (8 + (state === 'speaking' || state === 'listening' || state === 'listening_for_command' ? 12 : 4));
           const r = baseRadius + waveDeform + i * 4;
 
           const x = centerX + Math.cos(angle) * r;
@@ -96,14 +102,14 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({ state, onClick, audioLevel = 0
       // Core Glowing Sphere
       const grad = ctx.createRadialGradient(centerX - 15, centerY - 15, 10, centerX, centerY, baseRadius);
       grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.3, state === 'executing' ? '#34d399' : '#38bdf8');
-      grad.addColorStop(0.7, state === 'thinking' ? '#ec4899' : '#a855f7');
+      grad.addColorStop(0.3, state === 'executing' ? '#34d399' : state === 'wake_word_detected' ? '#fbbf24' : state === 'listening_for_piti' ? '#14b8a6' : '#38bdf8');
+      grad.addColorStop(0.7, state === 'thinking' ? '#ec4899' : state === 'wake_word_detected' ? '#f59e0b' : '#a855f7');
       grad.addColorStop(1, 'rgba(13, 17, 29, 0.8)');
 
       ctx.beginPath();
       ctx.arc(centerX, centerY, baseRadius * 0.75, 0, Math.PI * 2);
       ctx.fillStyle = grad;
-      ctx.shadowColor = state === 'speaking' ? '#ec4899' : '#38bdf8';
+      ctx.shadowColor = state === 'speaking' ? '#ec4899' : state === 'wake_word_detected' ? '#f59e0b' : state === 'listening_for_piti' ? '#14b8a6' : '#38bdf8';
       ctx.shadowBlur = 30;
       ctx.fill();
       ctx.shadowBlur = 0;
@@ -128,7 +134,11 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({ state, onClick, audioLevel = 0
       {/* Outer ambient glow */}
       <div 
         className={`absolute w-72 h-72 rounded-full transition-all duration-700 pointer-events-none blur-3xl ${
-          state === 'listening' 
+          state === 'listening_for_piti'
+            ? 'bg-teal-500/20 scale-95'
+            : state === 'wake_word_detected'
+            ? 'bg-amber-400/40 scale-125'
+            : state === 'listening' || state === 'listening_for_command'
             ? 'bg-cyan-500/25 scale-110' 
             : state === 'speaking' 
             ? 'bg-pink-500/30 scale-120' 
@@ -148,10 +158,22 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({ state, onClick, audioLevel = 0
 
       {/* State label badge */}
       <div className="z-20 mt-2 px-4 py-1 rounded-full text-xs font-semibold tracking-wider uppercase glass-pill transition-all duration-300">
-        {state === 'listening' && (
+        {state === 'listening_for_piti' && (
+          <span className="flex items-center gap-1.5 text-teal-300">
+            <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
+            Listening for "Piti"...
+          </span>
+        )}
+        {state === 'wake_word_detected' && (
+          <span className="flex items-center gap-1.5 text-amber-300 font-bold">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            Wake Word Detected!
+          </span>
+        )}
+        {(state === 'listening_for_command' || state === 'listening') && (
           <span className="flex items-center gap-1.5 text-cyan-300">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-            Listening...
+            Listening for Command...
           </span>
         )}
         {state === 'thinking' && (
@@ -169,7 +191,7 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({ state, onClick, audioLevel = 0
         {state === 'speaking' && (
           <span className="flex items-center gap-1.5 text-pink-300">
             <span className="w-2 h-2 rounded-full bg-pink-400 animate-pulse" />
-            Speaking...
+            Responding...
           </span>
         )}
         {state === 'awaiting_confirmation' && (
@@ -182,7 +204,7 @@ export const SiriOrb: React.FC<SiriOrbProps> = ({ state, onClick, audioLevel = 0
         )}
         {state === 'idle' && (
           <span className="text-slate-400 group-hover:text-slate-200">
-            Tap to Speak
+            Say "Piti" or Tap to Speak
           </span>
         )}
       </div>

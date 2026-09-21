@@ -8,6 +8,7 @@ const DEFAULT_CONFIG: AppConfig = {
   ttsModel: import.meta.env.VITE_OPENROUTER_TTS_MODEL || 'deepgram/flux-tts:free',
   ttsVoice: import.meta.env.VITE_OPENROUTER_TTS_VOICE || 'flux-cole-en',
   autoSpeak: true,
+  wakeWordEnabled: true,
 };
 
 export class ConfigService {

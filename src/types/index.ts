@@ -9,6 +9,9 @@ export type ToolName =
 
 export type AgentState = 
   | 'idle'
+  | 'listening_for_piti'
+  | 'wake_word_detected'
+  | 'listening_for_command'
   | 'listening'
   | 'thinking'
   | 'executing'
@@ -118,4 +121,5 @@ export interface AppConfig {
   ttsModel: string;
   ttsVoice: string;
   autoSpeak: boolean;
+  wakeWordEnabled?: boolean;
 }

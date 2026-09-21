@@ -1,5 +1,6 @@
 import { ToolName, ToolExecutionResult, AlarmItem, NoteItem, WeatherData } from '../../types';
 import { NativeAlarmService } from '../nativeAlarm';
+import { NativeAppLauncherService } from '../nativeAppLauncher';
 
 const STORAGE_ALARMS = 'pocket_ai_alarms_v1';
 const STORAGE_NOTES = 'pocket_ai_notes_v1';
@@ -215,62 +216,35 @@ export class ToolExecutor {
   }
 
   // --- Real Tool 4: Open Mobile App ---
-  private static async executeOpenApp(params: { app_id: string; app_name: string; query?: string }, timestamp: number): Promise<ToolExecutionResult> {
-    const appId = params.app_id.toLowerCase();
-    const query = params.query || '';
-    let intentUrl = '';
-    let webFallbackUrl = '';
+  private static async executeOpenApp(params: { package?: string; app_name?: string; app_id?: string; query?: string }, timestamp: number): Promise<ToolExecutionResult> {
+    const packageName = params.package || 'com.google.android.youtube';
+    const appName = params.app_name || 'Application';
 
-    switch (appId) {
-      case 'youtube':
-        if (query) {
-          intentUrl = `intent:#Intent;action=android.intent.action.VIEW;data=https://www.youtube.com/results?search_query=${encodeURIComponent(query)};package=com.google.android.youtube;end`;
-          webFallbackUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-        } else {
-          intentUrl = `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.google.android.youtube;end`;
-          webFallbackUrl = 'https://www.youtube.com';
-        }
-        break;
+    console.log(`[ToolExecutor] executeOpenApp: package=${packageName}, appName=${appName}`);
 
-      case 'maps':
-        if (query) {
-          intentUrl = `geo:0,0?q=${encodeURIComponent(query)}`;
-          webFallbackUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
-        } else {
-          intentUrl = `geo:0,0`;
-          webFallbackUrl = 'https://maps.google.com';
-        }
-        break;
-
-      case 'camera':
-        intentUrl = `intent:#Intent;action=android.media.action.IMAGE_CAPTURE;end`;
-        webFallbackUrl = '';
-        break;
-
-      case 'calculator':
-        intentUrl = `intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_CALCULATOR;end`;
-        webFallbackUrl = '';
-        break;
-
-      case 'dialer':
-        intentUrl = query ? `tel:${query.replace(/[^0-9+]/g, '')}` : `tel:`;
-        webFallbackUrl = intentUrl;
-        break;
-
-      case 'whatsapp':
-        intentUrl = query ? `whatsapp://send?text=${encodeURIComponent(query)}` : `whatsapp://app`;
-        webFallbackUrl = `https://web.whatsapp.com`;
-        break;
-
-      default:
-        webFallbackUrl = 'https://google.com';
-        intentUrl = '';
+    // 1. Android Native Execution via NativeAppLauncherPlugin
+    if (NativeAppLauncherService.isNative()) {
+      const nativeResult = await NativeAppLauncherService.launchApp(packageName, appName);
+      return {
+        success: nativeResult.success,
+        tool: 'open_app',
+        data: {
+          package: packageName,
+          appName: appName,
+          isNative: true
+        },
+        message: nativeResult.message,
+        timestamp
+      };
     }
 
-    const isMobile = /android|iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (isMobile && intentUrl) {
-      window.location.href = intentUrl;
-    } else if (webFallbackUrl) {
+    // 2. Web / Browser Preview Fallback
+    let webFallbackUrl = 'https://www.youtube.com';
+    if (packageName.includes('chrome')) webFallbackUrl = 'https://www.google.com';
+    if (packageName.includes('maps')) webFallbackUrl = 'https://maps.google.com';
+    if (packageName.includes('whatsapp')) webFallbackUrl = 'https://web.whatsapp.com';
+
+    if (webFallbackUrl) {
       window.open(webFallbackUrl, '_blank', 'noopener,noreferrer');
     }
 
@@ -278,13 +252,12 @@ export class ToolExecutor {
       success: true,
       tool: 'open_app',
       data: {
-        appId,
-        appName: params.app_name,
-        query
+        package: packageName,
+        appName: appName,
+        isNative: false
       },
-      message: `Opening ${params.app_name}${query ? ` for "${query}"` : ''}.`,
-      timestamp,
-      intentUrl
+      message: `${appName} opened in browser preview.`,
+      timestamp
     };
   }
 

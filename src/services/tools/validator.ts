@@ -89,17 +89,43 @@ export class ToolValidator {
       }
 
       case 'open_app': {
-        const validApps = ['youtube', 'maps', 'camera', 'calculator', 'dialer', 'whatsapp', 'browser'];
-        const appId = String(safeParams.app_id || '').toLowerCase().trim();
-        if (!validApps.includes(appId)) {
+        const rawPackage = String(safeParams.package || safeParams.app || safeParams.app_id || safeParams.app_name || '').toLowerCase().trim();
+
+        // Strict canonical allowlist of supported applications
+        const APP_MAP: Record<string, { package: string; appName: string }> = {
+          'youtube': { package: 'com.google.android.youtube', appName: 'YouTube' },
+          'yt': { package: 'com.google.android.youtube', appName: 'YouTube' },
+          'com.google.android.youtube': { package: 'com.google.android.youtube', appName: 'YouTube' },
+
+          'chrome': { package: 'com.android.chrome', appName: 'Chrome' },
+          'google chrome': { package: 'com.android.chrome', appName: 'Chrome' },
+          'browser': { package: 'com.android.chrome', appName: 'Chrome' },
+          'com.android.chrome': { package: 'com.android.chrome', appName: 'Chrome' },
+
+          'settings': { package: 'com.android.settings', appName: 'Settings' },
+          'android settings': { package: 'com.android.settings', appName: 'Settings' },
+          'system settings': { package: 'com.android.settings', appName: 'Settings' },
+          'com.android.settings': { package: 'com.android.settings', appName: 'Settings' },
+
+          'whatsapp': { package: 'com.whatsapp', appName: 'WhatsApp' },
+          'com.whatsapp': { package: 'com.whatsapp', appName: 'WhatsApp' },
+
+          'maps': { package: 'com.google.android.apps.maps', appName: 'Google Maps' },
+          'google maps': { package: 'com.google.android.apps.maps', appName: 'Google Maps' },
+          'com.google.android.apps.maps': { package: 'com.google.android.apps.maps', appName: 'Google Maps' }
+        };
+
+        const resolved = APP_MAP[rawPackage];
+        if (!resolved) {
           return {
             isValid: false,
-            error: `App '${appId}' is not in the supported mobile app whitelist (${validApps.join(', ')}).`,
+            error: `Application '${rawPackage}' is not in the approved allowlist (YouTube, Chrome, Settings, WhatsApp, Google Maps).`,
             requiresConfirmation: false
           };
         }
-        safeParams.app_id = appId;
-        safeParams.app_name = safeParams.app_name || appId.charAt(0).toUpperCase() + appId.slice(1);
+
+        safeParams.package = resolved.package;
+        safeParams.app_name = resolved.appName;
         return { isValid: true, sanitizedParams: safeParams, requiresConfirmation: false };
       }
 

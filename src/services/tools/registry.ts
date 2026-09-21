@@ -76,28 +76,30 @@ export const TOOL_REGISTRY: Record<ToolName, ToolDefinition> = {
   },
   open_app: {
     name: 'open_app',
-    description: 'Opens a mobile application or tool on the device (YouTube, Google Maps, Camera, Calculator, Phone Dialer, WhatsApp).',
+    description: 'Launches an approved mobile application on the Android device (YouTube, Chrome, Settings, WhatsApp, Google Maps).',
     parametersSchema: {
       type: 'object',
       properties: {
-        app_id: {
+        package: {
           type: 'string',
-          enum: ['youtube', 'maps', 'camera', 'calculator', 'dialer', 'whatsapp', 'browser'],
-          description: 'Target application identifier'
+          enum: [
+            'com.google.android.youtube',
+            'com.android.chrome',
+            'com.android.settings',
+            'com.whatsapp',
+            'com.google.android.apps.maps'
+          ],
+          description: 'Android package identifier, e.g. "com.google.android.youtube" or "com.android.settings"'
         },
         app_name: {
           type: 'string',
-          description: 'Human-friendly app name'
-        },
-        query: {
-          type: 'string',
-          description: 'Optional search query, location for maps, or video name for youtube'
+          description: 'Human-friendly app name, e.g. "YouTube", "Chrome", "Settings"'
         }
       },
-      required: ['app_id', 'app_name']
+      required: ['package']
     },
     isSensitive: false,
-    examplePrompts: ['Open YouTube and search lo-fi music', 'Open camera', 'Open Maps for Central Park', 'Open calculator']
+    examplePrompts: ['Open YouTube', 'Launch YouTube', 'Open Chrome', 'Open Settings', 'Open WhatsApp']
   },
   get_weather: {
     name: 'get_weather',

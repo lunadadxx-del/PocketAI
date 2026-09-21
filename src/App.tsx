@@ -11,6 +11,7 @@ import { SttService } from './services/stt';
 import { TtsService } from './services/tts';
 import { ConfigService } from './services/config';
 import { ToolExecutor } from './services/tools/executor';
+import { WakeWordService } from './services/wakeWord';
 
 import { SiriOrb } from './components/SiriOrb';
 import { ToolCard } from './components/ToolCard';
@@ -30,11 +31,15 @@ import {
   Volume2, 
   VolumeX,
   Keyboard,
-  ShieldCheck
+  ShieldCheck,
+  Radio
 } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [state, setState] = useState<AgentState>('idle');
+  const [wakeWordEnabled, setWakeWordEnabled] = useState<boolean>(
+    () => ConfigService.getConfig().wakeWordEnabled ?? true
+  );
   const [userSpeech, setUserSpeech] = useState<string>('');
   const [interimSpeech, setInterimSpeech] = useState<string>('');
   const [agentResponse, setAgentResponse] = useState<string>('');
@@ -182,26 +187,18 @@ export const App: React.FC = () => {
     });
   };
 
-  // Microphone toggle
-  const toggleListening = async () => {
-    if (state === 'listening') {
-      SttService.stopListening();
-      setState('idle');
-      return;
-    }
-
-    if (state === 'speaking') {
-      TtsService.stop();
-      setState('idle');
-      return;
-    }
-
+  // Direct active command listening (after wake word or manual mic tap)
+  const startCommandListening = async () => {
+    WakeWordService.stopWakeWordDetection();
+    setState('listening_for_command');
     setInterimSpeech('');
     setErrorMessage(null);
 
     try {
       await SttService.startListening({
-        onStart: () => setState('listening'),
+        onStart: () => {
+          setState('listening_for_command');
+        },
         onInterim: (text) => setInterimSpeech(text),
         onFinal: (text) => {
           setUserSpeech(text);
@@ -213,16 +210,85 @@ export const App: React.FC = () => {
           setState('idle');
         },
         onEnd: () => {
-          setState(prev => prev === 'listening' ? 'idle' : prev);
+          setState(prev => (prev === 'listening_for_command' || prev === 'listening') ? 'idle' : prev);
         },
         onVolume: (vol) => setMicAudioLevel(vol)
       });
     } catch (e: any) {
-      console.error('[App] toggleListening failed:', e);
+      console.error('[App] startCommandListening failed:', e);
       setErrorMessage(e.message || 'Could not start voice recognition.');
       setState('idle');
     }
   };
+
+  // Microphone toggle
+  const toggleListening = async () => {
+    // If currently listening for wake word "Piti", tap switches immediately to direct active command listening
+    if (state === 'listening_for_piti') {
+      WakeWordService.stopWakeWordDetection();
+      startCommandListening();
+      return;
+    }
+
+    if (state === 'listening' || state === 'listening_for_command') {
+      SttService.stopListening();
+      setState('idle');
+      return;
+    }
+
+    if (state === 'speaking') {
+      TtsService.stop();
+      setState('idle');
+      return;
+    }
+
+    startCommandListening();
+  };
+
+  // Manage Wake Word "Piti" Detection Loop
+  useEffect(() => {
+    if (!wakeWordEnabled) {
+      WakeWordService.stopWakeWordDetection();
+      return;
+    }
+
+    // Wake word runs whenever the app is idle and no dialog/drawer is open
+    const isBusyWithModal = showTextInput || confirmationState.isOpen || isSettingsOpen || isHistoryOpen;
+    if (state === 'idle' && !isBusyWithModal) {
+      const timer = setTimeout(() => {
+        setState('listening_for_piti');
+        WakeWordService.startWakeWordDetection({
+          onWakeWordDetected: (commandAfterWake: string) => {
+            console.log('[App] Wake word "Piti" detected! Command:', commandAfterWake || '(none)');
+            setState('wake_word_detected');
+
+            if (commandAfterWake && commandAfterWake.trim()) {
+              // Direct invocation: "Piti, open YouTube"
+              setTimeout(() => {
+                handleProcessInput(commandAfterWake);
+              }, 400);
+            } else {
+              // Standalone wake word: "Piti"
+              setTimeout(() => {
+                startCommandListening();
+              }, 700);
+            }
+          },
+          onVolume: (vol) => setMicAudioLevel(vol),
+          onError: (err) => {
+            console.warn('[App] Wake-word detector note:', err);
+          }
+        });
+      }, 350);
+
+      return () => {
+        clearTimeout(timer);
+        WakeWordService.stopWakeWordDetection();
+      };
+    } else if (state !== 'listening_for_piti') {
+      WakeWordService.stopWakeWordDetection();
+    }
+  }, [state, wakeWordEnabled, showTextInput, confirmationState.isOpen, isSettingsOpen, isHistoryOpen]);
 
   const handleTextSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -253,6 +319,28 @@ export const App: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Wake Word "Piti" quick toggle badge */}
+          <button
+            onClick={() => {
+              const nextVal = !wakeWordEnabled;
+              setWakeWordEnabled(nextVal);
+              ConfigService.updateConfig({ wakeWordEnabled: nextVal });
+              if (!nextVal) {
+                WakeWordService.stopWakeWordDetection();
+                setState('idle');
+              }
+            }}
+            className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              wakeWordEnabled
+                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm shadow-teal-500/10 hover:bg-teal-500/30'
+                : 'glass-pill text-slate-400 hover:text-slate-300'
+            }`}
+            title={wakeWordEnabled ? 'Wake word "Piti" is active (listening)' : 'Wake word "Piti" is disabled'}
+          >
+            <Radio className={`w-3.5 h-3.5 ${wakeWordEnabled ? 'animate-pulse text-teal-400' : 'text-slate-500'}`} />
+            <span>Piti</span>
+          </button>
+
           <button
             onClick={() => setIsHistoryOpen(true)}
             className="p-2 rounded-xl glass-pill text-slate-300 hover:text-white transition-colors"
@@ -296,6 +384,19 @@ export const App: React.FC = () => {
             <p className="text-base text-cyan-300 font-medium italic animate-pulse">
               "{interimSpeech}"
             </p>
+          ) : state === 'listening_for_piti' ? (
+            <p className="text-xs text-teal-300/80 font-mono flex items-center justify-center gap-1.5">
+              <Radio className="w-3.5 h-3.5 animate-pulse text-teal-400" />
+              Say "Piti" or tap orb to speak
+            </p>
+          ) : state === 'wake_word_detected' ? (
+            <p className="text-sm text-amber-300 font-semibold animate-pulse">
+              "Piti" detected! Listening for your command...
+            </p>
+          ) : state === 'listening_for_command' ? (
+            <p className="text-sm text-cyan-300 font-medium animate-pulse">
+              Listening for your command...
+            </p>
           ) : userSpeech && state === 'thinking' ? (
             <div className="space-y-1">
               <p className="text-sm text-slate-300 font-medium">
@@ -328,7 +429,7 @@ export const App: React.FC = () => {
       {/* Bottom Area: Suggestions & Controls */}
       <footer className="z-20 space-y-3 pb-2">
         {/* Suggestion Chips */}
-        {state === 'idle' && (
+        {(state === 'idle' || state === 'listening_for_piti') && (
           <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none justify-start sm:justify-center">
             {[
               'Set an alarm for 7 AM',
@@ -387,15 +488,19 @@ export const App: React.FC = () => {
             <button
               onClick={toggleListening}
               className={`p-5 rounded-full shadow-2xl transition-all duration-300 transform active:scale-95 ${
-                state === 'listening'
+                state === 'listening' || state === 'listening_for_command'
                   ? 'bg-gradient-to-tr from-cyan-400 to-blue-500 text-slate-950 scale-105 shadow-cyan-500/50'
+                  : state === 'listening_for_piti'
+                  ? 'bg-gradient-to-tr from-teal-500 to-cyan-600 text-white shadow-teal-500/30'
                   : state === 'speaking'
                   ? 'bg-gradient-to-tr from-pink-500 to-purple-600 text-white shadow-pink-500/50'
                   : 'bg-gradient-to-tr from-cyan-500 to-purple-600 text-white hover:opacity-95 shadow-purple-500/30'
               }`}
             >
-              {state === 'listening' ? (
+              {state === 'listening' || state === 'listening_for_command' ? (
                 <Mic className="w-7 h-7 animate-pulse" />
+              ) : state === 'listening_for_piti' ? (
+                <Radio className="w-7 h-7 animate-pulse" />
               ) : state === 'speaking' ? (
                 <Volume2 className="w-7 h-7 animate-bounce" />
               ) : (
@@ -434,7 +539,9 @@ export const App: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSaved={(newCfg: AppConfig) => {
-          // Config updated
+          if (newCfg.wakeWordEnabled !== undefined) {
+            setWakeWordEnabled(newCfg.wakeWordEnabled);
+          }
         }}
       />
 

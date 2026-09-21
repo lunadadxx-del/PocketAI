@@ -17,6 +17,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   const [ttsModel, setTtsModel] = useState(currentConfig.ttsModel);
   const [ttsVoice, setTtsVoice] = useState(currentConfig.ttsVoice);
   const [autoSpeak, setAutoSpeak] = useState(currentConfig.autoSpeak);
+  const [wakeWordEnabled, setWakeWordEnabled] = useState(currentConfig.wakeWordEnabled ?? true);
   const [isTestingAudio, setIsTestingAudio] = useState(false);
   const [testStatus, setTestStatus] = useState<string | null>(null);
 
@@ -28,7 +29,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
       agentModel: agentModel.trim(),
       ttsModel: ttsModel.trim(),
       ttsVoice: ttsVoice.trim(),
-      autoSpeak
+      autoSpeak,
+      wakeWordEnabled
     });
     onSaved(updated);
     onClose();
@@ -203,6 +205,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               <div
                 className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
                   autoSpeak ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Wake Word "Piti" Toggle */}
+          <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+            <div>
+              <div className="text-xs font-medium text-slate-200">Wake Word: "Piti"</div>
+              <div className="text-[11px] text-slate-500">Wake up assistant locally by saying "Piti"</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setWakeWordEnabled(!wakeWordEnabled)}
+              className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${
+                wakeWordEnabled ? 'bg-teal-500' : 'bg-slate-700'
+              }`}
+            >
+              <div
+                className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  wakeWordEnabled ? 'translate-x-5' : 'translate-x-0'
                 }`}
               />
             </button>
