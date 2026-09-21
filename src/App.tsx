@@ -258,21 +258,14 @@ export const App: React.FC = () => {
       const timer = setTimeout(() => {
         setState('listening_for_piti');
         WakeWordService.startWakeWordDetection({
-          onWakeWordDetected: (commandAfterWake: string) => {
-            console.log('[App] Wake word "Piti" detected! Command:', commandAfterWake || '(none)');
+          onWakeWordDetected: (confidence: number) => {
+            console.log('[App] Acoustic wake word "Piti" detected from raw audio! Confidence:', confidence);
             setState('wake_word_detected');
 
-            if (commandAfterWake && commandAfterWake.trim()) {
-              // Direct invocation: "Piti, open YouTube"
-              setTimeout(() => {
-                handleProcessInput(commandAfterWake);
-              }, 400);
-            } else {
-              // Standalone wake word: "Piti"
-              setTimeout(() => {
-                startCommandListening();
-              }, 700);
-            }
+            // Acoustic "Piti" detected -> immediately transition to command listening
+            setTimeout(() => {
+              startCommandListening();
+            }, 550);
           },
           onVolume: (vol) => setMicAudioLevel(vol),
           onError: (err) => {
