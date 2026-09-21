@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    background-color: #05070f;
+    color: #f1f5f9;
+  }
+}
+
+/* Siri glowing radial backdrops */
+.siri-glow {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, rgba(168, 85, 247, 0.12) 35%, rgba(236, 72, 153, 0.08) 60%, transparent 80%);
+}
+
+.siri-glow-active {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.3) 0%, rgba(168, 85, 247, 0.25) 40%, rgba(236, 72, 153, 0.18) 70%, transparent 90%);
+}
+
+/* Glassmorphic card styling */
+.glass-panel {
+  background: rgba(13, 17, 29, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-pill {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
