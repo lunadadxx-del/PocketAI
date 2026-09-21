@@ -114,9 +114,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             />
             <div className="flex flex-wrap gap-1.5 mt-2">
               {[
+                'google/gemma-4-31b-it:free',
                 'inclusionai/ling-3.0-flash-vl:free',
-                'google/gemma-4-26b-a4b-it:free',
-                'meta-llama/llama-3.3-70b-instruct:free',
+                'nex-agi/nex-n2.5-mini:free',
                 'openai/gpt-4o-mini'
               ].map(m => (
                 <button

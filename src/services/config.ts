@@ -4,7 +4,7 @@ const STORAGE_KEY = 'pocket_ai_config_v1';
 
 const DEFAULT_CONFIG: AppConfig = {
   apiKey: import.meta.env.VITE_OPENROUTER_API_KEY || '',
-  agentModel: import.meta.env.VITE_OPENROUTER_AGENT_MODEL || 'inclusionai/ling-3.0-flash-vl:free',
+  agentModel: import.meta.env.VITE_OPENROUTER_AGENT_MODEL || 'google/gemma-4-31b-it:free',
   ttsModel: import.meta.env.VITE_OPENROUTER_TTS_MODEL || 'deepgram/flux-tts:free',
   ttsVoice: import.meta.env.VITE_OPENROUTER_TTS_VOICE || 'flux-cole-en',
   autoSpeak: true,
@@ -18,11 +18,15 @@ export class ConfigService {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
+        const agentModel = (!parsed.agentModel || parsed.agentModel === 'inclusionai/ling-3.0-flash-vl:free')
+          ? (import.meta.env.VITE_OPENROUTER_AGENT_MODEL || 'google/gemma-4-31b-it:free')
+          : parsed.agentModel;
         return {
           ...DEFAULT_CONFIG,
           ...parsed,
-          // Priority to stored key if present, otherwise default
-          apiKey: parsed.apiKey || DEFAULT_CONFIG.apiKey,
+          agentModel,
+          // Priority to env/stored key
+          apiKey: import.meta.env.VITE_OPENROUTER_API_KEY || parsed.apiKey || DEFAULT_CONFIG.apiKey,
         };
       }
     } catch (e) {
