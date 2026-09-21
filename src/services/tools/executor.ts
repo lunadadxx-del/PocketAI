@@ -1,4 +1,5 @@
 import { ToolName, ToolExecutionResult, AlarmItem, NoteItem, WeatherData } from '../../types';
+import { NativeAlarmService } from '../nativeAlarm';
 
 const STORAGE_ALARMS = 'pocket_ai_alarms_v1';
 const STORAGE_NOTES = 'pocket_ai_notes_v1';
@@ -68,8 +69,44 @@ export class ToolExecutor {
     const minute = parseInt(mStr, 10);
     const label = params.label || 'Pocket AI Alarm';
 
-    // 1. Android Clock Intent URI
-    // Handled directly by Android ActivityManager
+    // 1. Android Native Execution via AlarmManager
+    if (NativeAlarmService.isNative()) {
+      const nativeRes = await NativeAlarmService.scheduleAlarm(hour, minute, label);
+      if (!nativeRes.success) {
+        return {
+          success: false,
+          tool: 'set_alarm',
+          data: null,
+          message: nativeRes.message || 'Unable to schedule alarm on Android device.',
+          timestamp
+        };
+      }
+
+      const newAlarm: AlarmItem = {
+        id: 'alarm_' + timestamp,
+        time: params.time,
+        label,
+        enabled: true,
+        timestamp
+      };
+      this.saveAlarm(newAlarm);
+
+      return {
+        success: true,
+        tool: 'set_alarm',
+        data: {
+          time: params.time,
+          displayTime: nativeRes.displayTime || params.time,
+          label,
+          alarmId: newAlarm.id,
+          isNative: true
+        },
+        message: nativeRes.message || `Alarm scheduled for ${nativeRes.displayTime || params.time}`,
+        timestamp
+      };
+    }
+
+    // 2. Android Clock Intent URI Fallback (Web / PWA)
     const intentUrl = `intent:#Intent;action=android.intent.action.SET_ALARM;i.android.intent.extra.alarm.HOUR=${hour};i.android.intent.extra.alarm.MINUTES=${minute};S.android.intent.extra.alarm.MESSAGE=${encodeURIComponent(label)};B.android.intent.extra.alarm.SKIP_UI=false;end`;
 
     // 2. Persist in local alarm storage
